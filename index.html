@@ -1,214 +1,114 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <title>3D Lights Out – Cosmic Edition</title>
-  <link href="https://fonts.googleapis.com/css?family=Roboto:400,500&display=swap" rel="stylesheet">
-  <style>
-    * { margin:0; padding:0; box-sizing:border-box; user-select:none; }
-    body {
-      font-family:'Roboto',sans-serif;
-      overflow:hidden;
-      background:#000;
-      position:relative;
-      color:#fff;
-    }
-    /* Subtle starfield */
-    body::before {
-      content:'';
-      position:absolute; top:0; left:0;
-      width:100%; height:100%;
-      background:
-        radial-gradient(circle, rgba(255,255,255,0.8) .5px, transparent .5px) repeat;
-      background-size:40px 40px;
-      z-index:-2;
-      animation: driftStars 150s linear infinite;
-    }
-    /* Soft nebula */
-    body::after {
-      content:'';
-      position:absolute; top:0; left:0;
-      width:100%; height:100%;
-      background:
-        radial-gradient(circle at 25% 35%, rgba(255,100,180,0.15) 0%, transparent 70%),
-        radial-gradient(circle at 75% 65%, rgba(80,180,255,0.15) 0%, transparent 70%);
-      filter: blur(30px) opacity(0.6);
-      z-index:-1;
-      animation: driftNebula 80s linear infinite reverse;
-    }
-    @keyframes driftStars {
-      from{transform:translate(0,0);} 
-      to{transform:translate(-20%,-20%);}
-    }
-    @keyframes driftNebula {
-      from{transform:translate(0,0);} 
-      to{transform:translate(10%,10%);}
-    }
-    h1 {
-      position:relative; z-index:1;
-      margin-bottom:10px;
-      font-weight:500; letter-spacing:2px;
-      text-transform:uppercase;
-      animation: glowText 3s ease-in-out infinite;
-    }
-    @keyframes glowText {
-      0%,100% { text-shadow:0 0 10px #fff,0 0 20px #ff0; }
-      50%    { text-shadow:0 0 20px #ff0,0 0 30px #ff0; }
-    }
-    #wrapper {
-      perspective:1200px;
-      z-index:1;
-      position:relative;
-    }
-    #game {
-      display:grid;
-      grid-template-columns:repeat(5,90px);
-      gap:15px;
-    }
-    .cell {
-      width:90px; height:90px;
-      position:relative;
-      transform-style:preserve-3d;
-      transform-origin:center;
-      transition:transform .6s cubic-bezier(.25,.8,.25,1),box-shadow .4s;
-      cursor:pointer;
-    }
-    .cell:hover {
-      transform:scale(1.1) rotateY(5deg);
-      box-shadow:0 8px 16px rgba(0,0,0,.5);
-    }
-    .face {
-      position:absolute;
-      width:100%; height:100%;
-      border-radius:12px;
-      backface-visibility:hidden;
-      filter:drop-shadow(0 2px 4px rgba(0,0,0,.6));
-      transform-style:preserve-3d;
-    }
-    .front {
-      background:linear-gradient(145deg,#ffd500,#ffb700);
-      transform:translateZ(25px);
-      animation:flickerFront 1.5s infinite;
-    }
-    .back {
-      background:linear-gradient(145deg,#333,#111);
-      transform:rotateX(180deg) translateZ(25px);
-      animation:flickerBack 1.5s infinite;
-    }
-    .cell.off {
-      transform:rotateX(180deg) scale(1.1);
-    }
-    @keyframes flickerFront {
-      0%,100% { box-shadow:0 0 20px 5px rgba(255,215,0,0.8); }
-      50%     { box-shadow:0 0 30px 8px rgba(255,215,0,0.4); }
-    }
-    @keyframes flickerBack {
-      0%,100% { box-shadow:0 0 15px 3px rgba(0,0,0,0.6); }
-      50%     { box-shadow:0 0 25px 5px rgba(0,0,0,0.4); }
-    }
-    #controls {
-      position:relative; z-index:1;
-      margin-top:20px;
-      display:flex; align-items:center;
-      background:rgba(255,255,255,0.1);
-      padding:12px 24px;
-      border-radius:16px;
-      box-shadow:0 8px 16px rgba(0,0,0,0.5);
-      backdrop-filter:blur(6px);
-    }
-    button {
-      background:linear-gradient(45deg,#ff7e5f,#feb47b,#ff7e5f);
-      background-size:300% 300%;
-      padding:12px 24px;
-      border:none; border-radius:12px;
-      color:#fff; font-size:16px; font-weight:500;
-      cursor:pointer;
-      animation:btnGradient 8s ease infinite;
-      transition:transform .2s;
-    }
-    button:hover {
-      transform:translateY(-2px) scale(1.05);
-    }
-    @keyframes btnGradient {
-      0%   { background-position:0% 50%; }
-      50%  { background-position:100% 50%; }
-      100% { background-position:0% 50%; }
-    }
-    #moves {
-      margin-left:20px;
-      animation:pulse 2s ease-in-out infinite;
-    }
-    @keyframes pulse {
-      0%,100% { transform:scale(1); opacity:1; }
-      50%     { transform:scale(1.1); opacity:0.7; }
-    }
-  </style>
+<meta charset="UTF-8">
+<title>3D Lights Out – Cosmic Edition</title>
+<link href="https://fonts.googleapis.com/css?family=Roboto:400,500&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;user-select:none;}
+body{
+  font-family:'Roboto',sans-serif;
+  overflow:hidden;
+  background:
+    radial-gradient(circle at 20% 30%, rgba(173,61,239,0.3), transparent 60%),
+    radial-gradient(circle at 80% 70%, rgba(30,150,255,0.3), transparent 60%),
+    radial-gradient(circle at 50% 20%, rgba(255,255,255,0.4) 1px, transparent 2px),
+    radial-gradient(circle at 25% 65%, rgba(255,255,255,0.3) 1px, transparent 2px),
+    radial-gradient(circle at 85% 40%, rgba(255,255,255,0.3) 1px, transparent 2px),
+    linear-gradient(135deg, #020111 10%, #191621 100%);
+  background-repeat:no-repeat,no-repeat,repeat,repeat,repeat,no-repeat;
+  background-size:cover,cover,3px 3px,2px 2px,2px 2px,cover;
+  color:#fff;
+  position:relative;
+}
+h1{
+  position:relative;z-index:1;margin-bottom:10px;
+  font-weight:500;letter-spacing:2px;text-transform:uppercase;
+  animation:glowText 3s ease-in-out infinite;
+}
+@keyframes glowText{
+  0%,100%{text-shadow:0 0 10px #fff,0 0 20px #ff0;}
+  50%{text-shadow:0 0 20px #ff0,0 0 30px #ff0;}
+}
+#wrapper{perspective:1200px;z-index:1;position:relative;}
+#game{display:grid;grid-template-columns:repeat(5,90px);gap:15px;}
+.cell{
+  width:90px;height:90px;
+  position:relative;transform-style:preserve-3d;transform-origin:center;
+  transition:transform .6s cubic-bezier(.25,.8,.25,1),box-shadow .4s;
+  cursor:pointer;
+}
+.cell:hover{transform:scale(1.1) rotateY(5deg);box-shadow:0 8px 16px rgba(0,0,0,.5);}
+.face{
+  position:absolute;width:100%;height:100%;border-radius:12px;
+  backface-visibility:hidden;filter:drop-shadow(0 2px 4px rgba(0,0,0,.6));transform-style:preserve-3d;
+}
+.front{
+  background:linear-gradient(145deg,#ffd500,#ffb700);
+  transform:translateZ(25px);
+  animation:flickerFront 1.5s infinite;
+}
+.back{
+  background:linear-gradient(145deg,#333,#111);
+  transform:rotateX(180deg) translateZ(25px);
+  animation:flickerBack 1.5s infinite;
+}
+.cell.off{transform:rotateX(180deg) scale(1.1);}
+@keyframes flickerFront{
+  0%,100%{box-shadow:0 0 20px 5px rgba(255,215,0,0.8);}
+  50%{box-shadow:0 0 30px 8px rgba(255,215,0,0.4);}
+}
+@keyframes flickerBack{
+  0%,100%{box-shadow:0 0 15px 3px rgba(0,0,0,0.6);}
+  50%{box-shadow:0 0 25px 5px rgba(0,0,0,0.4);}
+}
+#controls{
+  position:relative;z-index:1;margin-top:20px;
+  display:flex;align-items:center;
+  background:rgba(255,255,255,0.1);
+  padding:12px 24px;border-radius:16px;
+  box-shadow:0 8px 16px rgba(0,0,0,0.5);
+  backdrop-filter:blur(6px);
+}
+button{
+  background:linear-gradient(45deg,#ff7e5f,#feb47b,#ff7e5f);
+  background-size:300% 300%;
+  padding:12px 24px;border:none;border-radius:12px;
+  color:#fff;font-size:16px;font-weight:500;cursor:pointer;
+  animation:btnGradient 8s ease infinite;transition:transform .2s;
+}
+button:hover{transform:translateY(-2px) scale(1.05);}
+@keyframes btnGradient{
+  0%{background-position:0% 50%;}
+  50%{background-position:100% 50%;}
+  100%{background-position:0% 50%;}
+}
+#moves{
+  margin-left:20px;
+  animation:pulse 2s ease-in-out infinite;
+}
+@keyframes pulse{
+  0%,100%{transform:scale(1);opacity:1;}
+  50%{transform:scale(1.1);opacity:0.7;}
+}
+</style>
 </head>
 <body>
-  <h1>3D Lights Out</h1>
-  <div id="wrapper">
-    <div id="game"></div>
-  </div>
-  <div id="controls">
-    <button id="reset">Reset</button>
-    <span id="moves">Moves: 0</span>
-  </div>
-  <script>
-    const size = 5,
-          game = document.getElementById('game'),
-          movesDisplay = document.getElementById('moves'),
-          resetBtn = document.getElementById('reset');
-    let cells = [], moves = 0;
-    function init() {
-      moves = 0; updateMoves();
-      game.innerHTML = ''; cells = [];
-      for (let i = 0; i < size; i++) {
-        const row = [];
-        for (let j = 0; j < size; j++) {
-          const cell = document.createElement('div');
-          cell.className = 'cell';
-          cell.dataset.i = i; cell.dataset.j = j;
-          cell.innerHTML = '<div class="face front"></div><div class="face back"></div>';
-          cell.addEventListener('click', onClick);
-          game.appendChild(cell);
-          row.push(cell);
-        }
-        cells.push(row);
-      }
-      scramble();
-    }
-    function toggle(i, j) {
-      if (i<0||j<0||i>=size||j>=size) return;
-      cells[i][j].classList.toggle('off');
-    }
-    function onClickCell(i, j) {
-      toggle(i, j);
-      toggle(i-1, j); toggle(i+1, j);
-      toggle(i, j-1); toggle(i, j+1);
-    }
-    function onClick() {
-      const i = +this.dataset.i, j = +this.dataset.j;
-      onClickCell(i,j); moves++; updateMoves(); checkWin();
-    }
-    function updateMoves() {
-      movesDisplay.textContent = 'Moves: '+moves;
-    }
-    function checkWin() {
-      for (let i=0;i<size;i++)
-        for (let j=0;j<size;j++)
-          if (!cells[i][j].classList.contains('off')) return;
-      setTimeout(()=>alert('You won in '+moves+' moves!'),200);
-    }
-    function scramble() {
-      for (let k=0;k<size*size*3;k++)
-        onClickCell(
-          Math.floor(Math.random()*size),
-          Math.floor(Math.random()*size)
-        );
-      moves=0; updateMoves();
-    }
-    resetBtn.addEventListener('click',init);
-    init();
-  </script>
+<h1>3D Lights Out</h1>
+<div id="wrapper"><div id="game"></div></div>
+<div id="controls"><button id="reset">Reset</button><span id="moves">Moves: 0</span></div>
+<script>
+const size=5,game=document.getElementById('game'),movesDisplay=document.getElementById('moves'),resetBtn=document.getElementById('reset');
+let cells=[],moves=0;
+function init(){moves=0;updateMoves();game.innerHTML='';cells=[];for(let i=0;i<size;i++){const row=[];for(let j=0;j<size;j++){const cell=document.createElement('div');cell.className='cell';cell.dataset.i=i;cell.dataset.j=j;cell.innerHTML='<div class="face front"></div><div class="face back"></div>';cell.addEventListener('click',onClick);game.appendChild(cell);row.push(cell);}cells.push(row);}scramble();}
+function toggle(i,j){if(i<0||j<0||i>=size||j>=size)return;cells[i][j].classList.toggle('off');}
+function onClickCell(i,j){toggle(i,j);toggle(i-1,j);toggle(i+1,j);toggle(i,j-1);toggle(i,j+1);}
+function onClick(){const i=+this.dataset.i,j=+this.dataset.j;onClickCell(i,j);moves++;updateMoves();checkWin();}
+function updateMoves(){movesDisplay.textContent='Moves: '+moves;}
+function checkWin(){for(let i=0;i<size;i++)for(let j=0;j<size;j++)if(!cells[i][j].classList.contains('off'))return;setTimeout(()=>alert('You won in '+moves+' moves!'),200);}
+function scramble(){for(let k=0;k<size*size*3;k++)onClickCell(Math.floor(Math.random()*size),Math.floor(Math.random()*size));moves=0;updateMoves();}
+resetBtn.addEventListener('click',init);
+init();
+</script>
 </body>
 </html>
