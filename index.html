@@ -14,23 +14,27 @@ body {
   color: #fff;
   margin: 0;
   font-family: sans-serif;
+  user-select: none;
 }
 h1 {
   margin: 0;
 }
+#wrapper {
+  perspective: 1000px;
+  margin-top: 20px;
+}
 #game {
   display: grid;
   grid-template-columns: repeat(5, 70px);
-  grid-gap: 10px;
-  perspective: 800px;
-  margin-top: 20px;
+  gap: 10px;
 }
 .cell {
   width: 70px;
   height: 70px;
   position: relative;
   transform-style: preserve-3d;
-  transition: transform 0.4s;
+  transform-origin: center;
+  transition: transform 0.5s;
   cursor: pointer;
 }
 .face {
@@ -39,15 +43,16 @@ h1 {
   height: 100%;
   border-radius: 8px;
   backface-visibility: hidden;
+  transform-style: preserve-3d;
   box-shadow: 0 4px 6px rgba(0,0,0,0.4);
 }
 .front {
   background: yellow;
-  transform: translateZ(10px);
+  transform: translateZ(20px);
 }
 .back {
   background: #444;
-  transform: rotateX(180deg) translateZ(10px);
+  transform: rotateX(180deg) translateZ(20px);
 }
 .cell.off {
   transform: rotateX(180deg);
@@ -68,7 +73,9 @@ button {
 </head>
 <body>
 <h1>3D Lights Out</h1>
-<div id="game"></div>
+<div id="wrapper">
+  <div id="game"></div>
+</div>
 <div id="controls">
   <button id="reset">Reset</button>
   <span id="moves">Moves: 0</span>
@@ -108,14 +115,18 @@ function toggle(i, j) {
   cells[i][j].classList.toggle('off');
 }
 
-function onClick() {
-  const i = +this.dataset.i;
-  const j = +this.dataset.j;
+function onClickCell(i, j) {
   toggle(i, j);
   toggle(i - 1, j);
   toggle(i + 1, j);
   toggle(i, j - 1);
   toggle(i, j + 1);
+}
+
+function onClick() {
+  const i = +this.dataset.i;
+  const j = +this.dataset.j;
+  onClickCell(i, j);
   moves++;
   updateMoves();
   checkWin();
@@ -131,18 +142,14 @@ function checkWin() {
       if (!cells[i][j].classList.contains('off')) return;
     }
   }
-  setTimeout(() => alert('You won in ' + moves + ' moves!'), 300);
+  setTimeout(() => alert('You won in ' + moves + ' moves!'), 200);
 }
 
 function scramble() {
-  for (let k = 0; k < size * size * 2; k++) {
+  for (let k = 0; k < size * size * 3; k++) {
     const i = Math.floor(Math.random() * size);
     const j = Math.floor(Math.random() * size);
-    toggle(i, j);
-    toggle(i - 1, j);
-    toggle(i + 1, j);
-    toggle(i, j - 1);
-    toggle(i, j + 1);
+    onClickCell(i, j);
   }
   moves = 0;
   updateMoves();
