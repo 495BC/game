@@ -2,140 +2,262 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Evil Hangman: Battle the AI</title>
+  <title>Connect Four vs. AI</title>
   <style>
     body {
-      background: #222;
+      background: #111;
       color: #eee;
       font-family: sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 2rem;
+      text-align: center;
+      margin: 0; padding: 0;
     }
-    #word { font-size: 2rem; letter-spacing: 0.5rem; margin: 1rem 0; }
-    #letters button {
-      margin: 0.2rem;
-      width: 2rem;
-      height: 2rem;
-      background: #444;
-      border: none;
-      color: #eee;
-      cursor: pointer;
-      font-weight: bold;
+    #game {
+      display: inline-block;
+      position: relative;
     }
-    #letters button:disabled { background: #111; color: #555; cursor: default; }
-    #info { margin: 1rem; }
+    canvas { background: #0055aa; display: block; }
     #reset {
-      margin-top: 1rem;
-      padding: 0.5rem 1rem;
+      margin: 1rem;
+      padding: .5rem 1rem;
+      font-size: 1rem;
+      background: #aa0000;
       border: none;
-      background: #800;
-      color: #eee;
+      color: #fff;
       cursor: pointer;
     }
+    #status { margin-top: .5rem; }
   </style>
 </head>
 <body>
-  <h1>Evil Hangman</h1>
-  <div id="word">----</div>
-  <div id="letters"></div>
-  <div id="info">Guesses left: <span id="lives">8</span> | Wrong: <span id="wrong">0</span></div>
-  <button id="reset">🔄 New Game</button>
+  <h1>Connect Four: Battle the AI</h1>
+  <div id="game">
+    <canvas id="board" width="700" height="600"></canvas>
+    <div id="status"></div>
+  </div>
+  <button id="reset">New Game</button>
 
   <script>
-    // small sample word list (all 6 letters)
-    const WORDS = [
-      "planet","forest","castle","dragon","market","village","window","puzzle",
-      "diamond","flight","guitar","silver","museum","jungle","tunnel","velvet",
-      "rocket","quartz","zombie","father","mother","number","orange","people",
-      "danger","candle","energy","butter","animal","leader","future","labour",
-      "travel","garden","secret","bridge","friend","hunger","island","kettle"
-    ];
-    let candidates, pattern, lives, wrongCount, guessed;
-
-    const wordEl   = document.getElementById("word");
-    const lettersEl= document.getElementById("letters");
-    const livesEl  = document.getElementById("lives");
-    const wrongEl  = document.getElementById("wrong");
-    const resetBtn = document.getElementById("reset");
-
-    function init() {
-      // all words same length
-      candidates = WORDS.slice();
-      pattern    = Array(candidates[0].length).fill("-");
-      lives      = 8;
-      wrongCount = 0;
-      guessed    = new Set();
-      updateDisplay();
-      buildKeyboard();
-    }
-
-    function buildKeyboard() {
-      lettersEl.innerHTML = "";
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").forEach(letter => {
-        const btn = document.createElement("button");
-        btn.textContent = letter;
-        btn.onclick = () => makeGuess(letter.toLowerCase(), btn);
-        lettersEl.appendChild(btn);
-      });
-    }
-
-    function updateDisplay() {
-      wordEl.textContent = pattern.join("");
-      livesEl.textContent = lives;
-      wrongEl.textContent = wrongCount;
-    }
-
-    function makeGuess(letter, btn) {
-      btn.disabled = true;
-      if (guessed.has(letter)) return;
-      guessed.add(letter);
-
-      // partition into families by pattern of this guess
-      const families = {};
-      for (let w of candidates) {
-        let key = "";
-        for (let i = 0; i < w.length; i++) {
-          key += (w[i] === letter ? letter : "-");
+  // CONFIG
+  const COLS = 7, ROWS = 6, CELL = 100;
+  const HUMAN = 1, AI = 2;
+  const MAX_DEPTH = 6; // increase to make AI deeper (slower)
+  // STATE
+  let board, currentPlayer, gameOver;
+  const canvas = document.getElementById('board');
+  const ctx = canvas.getContext('2d');
+  const statusEl = document.getElementById('status');
+  // INIT
+  function init(){
+    board = Array.from({length:ROWS}, ()=>Array(COLS).fill(0));
+    currentPlayer = HUMAN;
+    gameOver = false;
+    statusEl.textContent = "Your turn";
+    draw();
+  }
+  // DRAW
+  function draw(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    // draw grid + pieces
+    for(let r=0; r<ROWS; r++){
+      for(let c=0; c<COLS; c++){
+        const x=c*CELL, y=(r)*CELL;
+        ctx.fillStyle = '#0055aa';
+        ctx.fillRect(x,y,CELL,CELL);
+        ctx.strokeStyle = '#002244';
+        ctx.strokeRect(x,y,CELL,CELL);
+        const piece = board[r][c];
+        if(piece){
+          ctx.beginPath();
+          ctx.arc(x+CELL/2, y+CELL/2, CELL*0.4, 0, Math.PI*2);
+          ctx.fillStyle = piece===HUMAN ? '#ffcc00' : '#ff4444';
+          ctx.fill();
+        } else {
+          ctx.beginPath();
+          ctx.arc(x+CELL/2, y+CELL/2, CELL*0.4, 0, Math.PI*2);
+          ctx.fillStyle = '#001133';
+          ctx.fill();
         }
-        (families[key] || (families[key] = [])).push(w);
       }
-      // pick the largest family
-      let bestKey = Object.keys(families).reduce((a,b) =>
-                 families[b].length > families[a].length ? b : a
-      );
-      candidates = families[bestKey];
-
-      // reveal if any
-      if (bestKey.includes(letter)) {
-        for (let i = 0; i < bestKey.length; i++) {
-          if (bestKey[i] === letter) pattern[i] = letter;
+    }
+  }
+  // CLICK HANDLER
+  canvas.addEventListener('click', e=>{
+    if(gameOver || currentPlayer!==HUMAN) return;
+    const col = Math.floor(e.offsetX / CELL);
+    if(drop(col, HUMAN)){
+      afterMove();
+    }
+  });
+  // DROP PIECE
+  function drop(col, player){
+    for(let r=ROWS-1; r>=0; r--){
+      if(board[r][col]===0){
+        board[r][col] = player;
+        return true;
+      }
+    }
+    return false;
+  }
+  // POST-MOVE
+  function afterMove(){
+    draw();
+    const win = checkWin(board, currentPlayer);
+    if(win || isFull(board)){
+      endGame(win? currentPlayer : 0);
+      return;
+    }
+    currentPlayer = currentPlayer===HUMAN ? AI : HUMAN;
+    if(currentPlayer===AI){
+      statusEl.textContent = "AI thinking...";
+      setTimeout(aiTurn, 200);
+    } else {
+      statusEl.textContent = "Your turn";
+    }
+  }
+  // AI TURN
+  function aiTurn(){
+    const {column} = minimax(board, MAX_DEPTH, -Infinity, Infinity, true);
+    drop(column, AI);
+    afterMove();
+  }
+  // ENDGAME
+  function endGame(winner){
+    gameOver = true;
+    if(winner===HUMAN) statusEl.textContent = "🎉 You win!";
+    else if(winner===AI) statusEl.textContent = "💥 AI wins!";
+    else statusEl.textContent = "🤝 Draw!";
+  }
+  // CHECK FULL
+  function isFull(b){
+    return b[0].every(c=>c!==0);
+  }
+  // WIN CHECK
+  function checkWin(b, player){
+    // directions: h,v,diag1,diag2
+    for(let r=0; r<ROWS; r++){
+      for(let c=0; c<COLS; c++){
+        if(b[r][c]!==player) continue;
+        if(c+3<COLS && [1,2,3].every(i=>b[r][c+i]===player)) return true;
+        if(r+3<ROWS && [1,2,3].every(i=>b[r+i][c]===player)) return true;
+        if(c+3<COLS && r+3<ROWS && [1,2,3].every(i=>b[r+i][c+i]===player)) return true;
+        if(c-3>=0   && r+3<ROWS && [1,2,3].every(i=>b[r+i][c-i]===player)) return true;
+      }
+    }
+    return false;
+  }
+  // VALID COLUMNS
+  function validCols(b){
+    const cols = [];
+    for(let c=0;c<COLS;c++){
+      if(b[0][c]===0) cols.push(c);
+    }
+    return cols;
+  }
+  // SCORE WINDOW
+  function scoreWindow(window, player){
+    const opp = player===AI? HUMAN:AI;
+    const count = num=>window.filter(x=>x===num).length;
+    const score = count(player)===4 ? 100
+                : count(player)===3 && count(0)===1 ? 5
+                : count(player)===2 && count(0)===2 ? 2
+                : 0;
+    const negative = count(opp)===3 && count(0)===1 ? -4 : 0;
+    return score + negative;
+  }
+  // HEURISTIC EVAL
+  function evaluateBoard(b){
+    let score=0;
+    // center control
+    const centerArray = b.map(r=>r[Math.floor(COLS/2)]);
+    score += centerArray.filter(x=>x===AI).length * 3;
+    // horizontal
+    for(let r=0; r<ROWS; r++){
+      for(let c=0; c<COLS-3; c++){
+        const window = [b[r][c],b[r][c+1],b[r][c+2],b[r][c+3]];
+        score += scoreWindow(window, AI);
+      }
+    }
+    // vertical
+    for(let c=0; c<COLS; c++){
+      for(let r=0; r<ROWS-3; r++){
+        const window = [b[r][c],b[r+1][c],b[r+2][c],b[r+3][c]];
+        score += scoreWindow(window, AI);
+      }
+    }
+    // diag down-right
+    for(let r=0; r<ROWS-3; r++){
+      for(let c=0; c<COLS-3; c++){
+        const window = [b[r][c],b[r+1][c+1],b[r+2][c+2],b[r+3][c+3]];
+        score += scoreWindow(window, AI);
+      }
+    }
+    // diag down-left
+    for(let r=0; r<ROWS-3; r++){
+      for(let c=3; c<COLS; c++){
+        const window = [b[r][c],b[r+1][c-1],b[r+2][c-2],b[r+3][c-3]];
+        score += scoreWindow(window, AI);
+      }
+    }
+    return score;
+  }
+  // CLONE BOARD
+  function clone(b){
+    return b.map(r=>r.slice());
+  }
+  // MINIMAX + ALPHA-BETA
+  function minimax(b, depth, alpha, beta, maximizing){
+    const valid = validCols(b);
+    const terminal = checkWin(b, HUMAN) || checkWin(b, AI) || valid.length===0;
+    if(depth===0 || terminal){
+      if(terminal){
+        if(checkWin(b, AI)) return {score: Infinity};
+        else if(checkWin(b, HUMAN)) return {score:-Infinity};
+        else return {score:0};
+      }
+      return {score: evaluateBoard(b)};
+    }
+    if(maximizing){
+      let value = -Infinity, bestCol = valid[0];
+      for(const col of valid){
+        const temp = clone(b);
+        dropTo(temp, col, AI);
+        const newScore = minimax(temp, depth-1, alpha, beta, false).score;
+        if(newScore > value){
+          value = newScore; bestCol = col;
         }
-      } else {
-        lives--;
-        wrongCount++;
+        alpha = Math.max(alpha, value);
+        if(alpha >= beta) break;
       }
-      updateDisplay();
-      checkEnd();
+      return {score:value, column:bestCol};
+    } else {
+      let value = Infinity, bestCol = valid[0];
+      for(const col of valid){
+        const temp = clone(b);
+        dropTo(temp, col, HUMAN);
+        const newScore = minimax(temp, depth-1, alpha, beta, true).score;
+        if(newScore < value){
+          value = newScore; bestCol = col;
+        }
+        beta = Math.min(beta, value);
+        if(alpha >= beta) break;
+      }
+      return {score:value, column:bestCol};
     }
-
-    function checkEnd() {
-      if (!pattern.includes("-")) {
-        setTimeout(() => alert("🎉 You cracked it! Word was “" + candidates[0] + "”"), 10);
-        disableAll();
-      } else if (lives <= 0) {
-        setTimeout(() => alert("😈 The AI wins! Word was “" + candidates[Math.floor(Math.random()*candidates.length)] + "”"), 10);
-        disableAll();
+  }
+  // DROP ON CLONED BOARD
+  function dropTo(b, col, player){
+    for(let r=ROWS-1; r>=0; r--){
+      if(b[r][col]===0){
+        b[r][col]=player;
+        break;
       }
     }
+  }
+  // RESET BUTTON
+  document.getElementById('reset').addEventListener('click', init);
 
-    function disableAll() {
-      Array.from(lettersEl.children).forEach(b => b.disabled = true);
-    }
-
-    resetBtn.onclick = init;
-    init();
+  // START
+  init();
   </script>
 </body>
 </html>
