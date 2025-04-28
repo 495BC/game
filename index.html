@@ -4,93 +4,148 @@
 <meta charset="UTF-8">
 <title>3D Lights Out</title>
 <style>
-body { margin:0; padding:0; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; background:#1a1a1a; color:#fff; font-family:sans-serif; }
-h1 { margin:20px; }
-#game-container { perspective: 800px; }
-#game { display:grid; grid-template-columns: repeat(5, 60px); grid-gap:5px; transform: rotateX(60deg) rotateZ(45deg); transform-style: preserve-3d; }
-.cell { width:60px; height:60px; background: #222; cursor:pointer; position: relative; transition: background 0.3s, transform 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.5); }
-.cell::before { content:''; position:absolute; top:0; left:0; width:100%; height:100%; background: #ffcc00; transform-origin: bottom; transform: rotateX(90deg) translateZ(-30px); transition: background 0.3s; }
-.cell.off::before { background: #555; }
-.cell:active { transform: translateY(4px); box-shadow: 0 2px 3px rgba(0,0,0,0.5); }
-#controls { margin-top:20px; display:flex; align-items:center; }
-button { padding:10px 20px; font-size:16px; margin-right:10px; }
-#moves { font-size:16px; }
+body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: #111;
+  color: #fff;
+  margin: 0;
+  font-family: sans-serif;
+}
+h1 {
+  margin: 0;
+}
+#game {
+  display: grid;
+  grid-template-columns: repeat(5, 70px);
+  grid-gap: 10px;
+  perspective: 800px;
+  margin-top: 20px;
+}
+.cell {
+  width: 70px;
+  height: 70px;
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.4s;
+  cursor: pointer;
+}
+.face {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  backface-visibility: hidden;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.4);
+}
+.front {
+  background: yellow;
+  transform: translateZ(10px);
+}
+.back {
+  background: #444;
+  transform: rotateX(180deg) translateZ(10px);
+}
+.cell.off {
+  transform: rotateX(180deg);
+}
+#controls {
+  margin-top: 20px;
+}
+button {
+  padding: 10px 20px;
+  font-size: 16px;
+  cursor: pointer;
+}
+#moves {
+  margin-left: 15px;
+  font-size: 16px;
+}
 </style>
 </head>
 <body>
 <h1>3D Lights Out</h1>
-<div id="game-container">
-  <div id="game"></div>
-</div>
+<div id="game"></div>
 <div id="controls">
   <button id="reset">Reset</button>
   <span id="moves">Moves: 0</span>
 </div>
 <script>
-let size = 5;
+const size = 5;
 const game = document.getElementById('game');
 const movesDisplay = document.getElementById('moves');
 const resetBtn = document.getElementById('reset');
+let cells = [];
 let moves = 0;
-const cells = [];
 
 function init() {
-    moves = 0;
-    updateMoves();
-    game.innerHTML = '';
-    for (let i = 0; i < size; i++) {
-        cells[i] = [];
-        for (let j = 0; j < size; j++) {
-            const cell = document.createElement('div');
-            cell.className = 'cell';
-            cell.dataset.i = i;
-            cell.dataset.j = j;
-            cell.addEventListener('click', onClick);
-            game.appendChild(cell);
-            cells[i][j] = cell;
-        }
+  moves = 0;
+  updateMoves();
+  game.innerHTML = '';
+  cells = [];
+  for (let i = 0; i < size; i++) {
+    const row = [];
+    for (let j = 0; j < size; j++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.i = i;
+      cell.dataset.j = j;
+      cell.innerHTML = '<div class="face front"></div><div class="face back"></div>';
+      cell.addEventListener('click', onClick);
+      game.appendChild(cell);
+      row.push(cell);
     }
-    scramble();
-}
-
-function updateMoves() {
-    movesDisplay.textContent = 'Moves: ' + moves;
+    cells.push(row);
+  }
+  scramble();
 }
 
 function toggle(i, j) {
-    if (i < 0 || j < 0 || i >= size || j >= size) return;
-    cells[i][j].classList.toggle('off');
+  if (i < 0 || j < 0 || i >= size || j >= size) return;
+  cells[i][j].classList.toggle('off');
 }
 
-function onClick(e) {
-    const i = +e.currentTarget.dataset.i;
-    const j = +e.currentTarget.dataset.j;
-    toggle(i, j);
-    toggle(i-1, j);
-    toggle(i+1, j);
-    toggle(i, j-1);
-    toggle(i, j+1);
-    moves++;
-    updateMoves();
-    checkWin();
+function onClick() {
+  const i = +this.dataset.i;
+  const j = +this.dataset.j;
+  toggle(i, j);
+  toggle(i - 1, j);
+  toggle(i + 1, j);
+  toggle(i, j - 1);
+  toggle(i, j + 1);
+  moves++;
+  updateMoves();
+  checkWin();
 }
 
-function scramble() {
-    for (let k = 0; k < size*size*3; k++) {
-        const i = Math.floor(Math.random() * size);
-        const j = Math.floor(Math.random() * size);
-        toggle(i, j);
-        toggle(i-1, j);
-        toggle(i+1, j);
-        toggle(i, j-1);
-        toggle(i, j+1);
-    }
+function updateMoves() {
+  movesDisplay.textContent = 'Moves: ' + moves;
 }
 
 function checkWin() {
-    if (cells.flat().every(c => c.classList.contains('off'))) {
-        setTimeout(() => alert('You won in ' + moves + ' moves!'), 100);
+  for (let i = 0; i < size; i++) {
+    for (let j = 0; j < size; j++) {
+      if (!cells[i][j].classList.contains('off')) return;
     }
+  }
+  setTimeout(() => alert('You won in ' + moves + ' moves!'), 300);
+}
+
+function scramble() {
+  for (let k = 0; k < size * size * 2; k++) {
+    const i = Math.floor(Math.random() * size);
+    const j = Math.floor(Math.random() * size);
+    toggle(i, j);
+    toggle(i - 1, j);
+    toggle(i + 1, j);
+    toggle(i, j - 1);
+    toggle(i, j + 1);
+  }
+  moves = 0;
+  updateMoves();
 }
 
 resetBtn.addEventListener('click', init);
