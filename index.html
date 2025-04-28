@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <title>Chess vs Stockfish</title>
   <link
     rel="stylesheet"
@@ -18,13 +18,8 @@
       align-items: center;
       margin: 20px;
     }
-    #board {
-      width: 480px;
-      margin-top: 20px;
-    }
-    #controls {
-      margin-bottom: 10px;
-    }
+    #board { width: 480px; margin-top: 20px; }
+    #controls { margin-bottom: 10px; }
     #moves {
       margin-top: 10px;
       width: 480px;
@@ -32,6 +27,7 @@
       overflow-y: auto;
       border: 1px solid #ccc;
       padding: 5px;
+      font-size: 14px;
     }
   </style>
 </head>
@@ -58,40 +54,49 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.13.4/chess.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/js/chessboard.min.js"></script>
   <script>
-    const boardEl = document.getElementById('board');
-    const movesEl = document.getElementById('moves');
     const engineSelect = document.getElementById('engineSelect');
-    const skillInput = document.getElementById('skillLevel');
+    const skillInput   = document.getElementById('skillLevel');
     const skillDisplay = document.getElementById('skillValue');
-    const newGameBtn = document.getElementById('newGame');
+    const newGameBtn   = document.getElementById('newGame');
+    const movesEl      = document.getElementById('moves');
 
-    let game = new Chess();
+    let game       = new Chess();
     let board;
     let engine;
     let engineBusy = false;
 
-    // Reflect slider
+    // Update slider label
     skillInput.addEventListener('input', () => {
       skillDisplay.textContent = skillInput.value;
     });
 
-    // Load/Reload Stockfish when engine or skill changes
+    // Load or reload the Stockfish worker
     function loadEngine() {
       if (engine) engine.terminate();
       engine = new Worker(engineSelect.value);
       engine.onmessage = handleEngineMessage;
+
+      // Proper UCI initialization sequence
       engine.postMessage('uci');
+      engine.postMessage('isready');
       engine.postMessage('ucinewgame');
       engine.postMessage('setoption name Skill Level value ' + skillInput.value);
     }
+
     engineSelect.addEventListener('change', loadEngine);
     skillInput.addEventListener('change', () => {
-      engine.postMessage('setoption name Skill Level value ' + skillInput.value);
+      if (engine) {
+        engine.postMessage('setoption name Skill Level value ' + skillInput.value);
+      }
     });
 
-    // Parse bestmove from engine
+    // Handle engine messages
     function handleEngineMessage(event) {
       const line = event.data.toString();
+      if (line === 'readyok') {
+        // engine is ready
+        return;
+      }
       if (line.startsWith('bestmove')) {
         const mv = line.split(' ')[1];
         if (mv && mv !== '(none)') {
@@ -103,18 +108,22 @@
       }
     }
 
-    // When player drops a piece
+    // Player move handler
     function onDrop(source, target) {
       if (engineBusy) return 'snapback';
-      const mv = game.move({ from: source, to: target, promotion: 'q' });
-      if (!mv) return 'snapback';
-
+      const move = game.move({ from: source, to: target, promotion: 'q' });
+      if (!move) return 'snapback';
       board.position(game.fen());
       updateMoveList();
       window.setTimeout(engineMove, 200);
     }
 
-    // Tell engine to think and play
+    // Snap-end handler for special moves
+    function onSnapEnd() {
+      board.position(game.fen());
+    }
+
+    // Tell Stockfish to think
     function engineMove() {
       if (game.game_over()) return;
       engineBusy = true;
@@ -122,20 +131,20 @@
       engine.postMessage('go depth 15');
     }
 
-    // Render move history
+    // Update move history display
     function updateMoveList() {
-      const hist = game.history({ verbose: true });
+      const history = game.history({ verbose: true });
       let html = '';
-      for (let i = 0; i < hist.length; i += 2) {
+      for (let i = 0; i < history.length; i += 2) {
         const num = (i/2) + 1;
-        const w = hist[i]   ? hist[i].san   : '';
-        const b = hist[i+1] ? hist[i+1].san : '';
+        const w   = history[i]   ? history[i].san   : '';
+        const b   = history[i+1] ? history[i+1].san : '';
         html += `<div>${num}. ${w} ${b}</div>`;
       }
       movesEl.innerHTML = html;
     }
 
-    // Reset everything
+    // Start or restart the game
     function startNewGame() {
       game.reset();
       board.position('start');
@@ -143,16 +152,17 @@
       loadEngine();
     }
 
-    // Initialize board
-    board = Chessboard(boardEl, {
+    // Initialize the board
+    board = Chessboard('board', {
       draggable: true,
       position: 'start',
-      onDrop
+      onDrop,
+      onSnapEnd
     });
 
     newGameBtn.addEventListener('click', startNewGame);
 
-    // Kick off
+    // Kick off on load
     startNewGame();
   </script>
 </body>
