@@ -1,225 +1,141 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Nested Maze Runner</title>
+  <title>Evil Hangman: Battle the AI</title>
   <style>
-    html, body { margin:0; padding:0; background:#222; color:#ddd; overflow:hidden; }
-    #gameCanvas { display:block; margin:auto; background:#333; }
-    #info {
-      position:absolute; top:10px; left:10px; color:#fff;
-      font-family:sans-serif; font-size:18px;
+    body {
+      background: #222;
+      color: #eee;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem;
+    }
+    #word { font-size: 2rem; letter-spacing: 0.5rem; margin: 1rem 0; }
+    #letters button {
+      margin: 0.2rem;
+      width: 2rem;
+      height: 2rem;
+      background: #444;
+      border: none;
+      color: #eee;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    #letters button:disabled { background: #111; color: #555; cursor: default; }
+    #info { margin: 1rem; }
+    #reset {
+      margin-top: 1rem;
+      padding: 0.5rem 1rem;
+      border: none;
+      background: #800;
+      color: #eee;
+      cursor: pointer;
     }
   </style>
 </head>
 <body>
-  <canvas id="gameCanvas" width="600" height="600"></canvas>
-  <div id="info">Level: 1</div>
-<script>
-(() => {
-  const canvas = document.getElementById('gameCanvas'),
-        ctx    = canvas.getContext('2d');
-  let cols, rows, cellSize,
-      grid = [], stack = [],
-      player = {x:0,y:0},
-      door   = {x:0,y:0},
-      monsters = [],
-      level = 1,
-      monsterInterval = 500,
-      lastMonsterMove = 0;
+  <h1>Evil Hangman</h1>
+  <div id="word">----</div>
+  <div id="letters"></div>
+  <div id="info">Guesses left: <span id="lives">8</span> | Wrong: <span id="wrong">0</span></div>
+  <button id="reset">🔄 New Game</button>
 
-  // Cell holds wall flags [top, right, bottom, left]
-  function Cell(x,y){
-    this.x = x; this.y = y;
-    this.walls = [true,true,true,true];
-    this.visited = false;
-  }
-  Cell.prototype.checkNeighbors = function(){
-    const {x,y} = this, list = [];
-    const up    = y>0        && grid[idx(x,y-1)],
-          right = x<cols-1   && grid[idx(x+1,y)],
-          down  = y<rows-1   && grid[idx(x,y+1)],
-          left  = x>0        && grid[idx(x-1,y)];
-    if(up    && !up.visited)    list.push(up);
-    if(right && !right.visited) list.push(right);
-    if(down  && !down.visited)  list.push(down);
-    if(left  && !left.visited)  list.push(left);
-    return list;
-  };
+  <script>
+    // small sample word list (all 6 letters)
+    const WORDS = [
+      "planet","forest","castle","dragon","market","village","window","puzzle",
+      "diamond","flight","guitar","silver","museum","jungle","tunnel","velvet",
+      "rocket","quartz","zombie","father","mother","number","orange","people",
+      "danger","candle","energy","butter","animal","leader","future","labour",
+      "travel","garden","secret","bridge","friend","hunger","island","kettle"
+    ];
+    let candidates, pattern, lives, wrongCount, guessed;
 
-  function idx(x,y){ return x + y * cols; }
+    const wordEl   = document.getElementById("word");
+    const lettersEl= document.getElementById("letters");
+    const livesEl  = document.getElementById("lives");
+    const wrongEl  = document.getElementById("wrong");
+    const resetBtn = document.getElementById("reset");
 
-  function removeWalls(a,b){
-    const dx = a.x - b.x, dy = a.y - b.y;
-    if(dx===1){ a.walls[3]=false; b.walls[1]=false; }
-    if(dx===-1){ a.walls[1]=false; b.walls[3]=false; }
-    if(dy===1){ a.walls[0]=false; b.walls[2]=false; }
-    if(dy===-1){ a.walls[2]=false; b.walls[0]=false; }
-  }
-
-  function generateMaze(){
-    grid = [];
-    cols = 15 + level*2;
-    rows = 15 + level*2;
-    cellSize = canvas.width / cols;
-
-    // initialize cells
-    for(let y=0; y<rows; y++){
-      for(let x=0; x<cols; x++){
-        grid.push(new Cell(x,y));
-      }
+    function init() {
+      // all words same length
+      candidates = WORDS.slice();
+      pattern    = Array(candidates[0].length).fill("-");
+      lives      = 8;
+      wrongCount = 0;
+      guessed    = new Set();
+      updateDisplay();
+      buildKeyboard();
     }
 
-    // carve with DFS backtracker
-    const start = grid[0];
-    start.visited = true;
-    stack = [start];
-    while(stack.length){
-      const current = stack.pop();
-      const nbrs = current.checkNeighbors();
-      if(nbrs.length){
-        stack.push(current);
-        const next = nbrs[Math.floor(Math.random()*nbrs.length)];
-        next.visited = true;
-        removeWalls(current,next);
-        stack.push(next);
-      }
-    }
-
-    // pick a random border cell (not the start) as exit door
-    const border = grid.filter(c =>
-      (c.x===0||c.x===cols-1||c.y===0||c.y===rows-1) &&
-      !(c.x===0&&c.y===0)
-    );
-    const exitCell = border[Math.floor(Math.random()*border.length)];
-    // remove its outer wall for a proper “door”
-    if(exitCell.x===0)         exitCell.walls[3]=false;
-    if(exitCell.x===cols-1)    exitCell.walls[1]=false;
-    if(exitCell.y===0)         exitCell.walls[0]=false;
-    if(exitCell.y===rows-1)    exitCell.walls[2]=false;
-
-    door.x = exitCell.x; door.y = exitCell.y;
-    player.x = 0; player.y = 0;
-
-    // spawn one monster per level, not too close
-    monsters = [];
-    for(let i=0; i<level; i++){
-      let mx, my;
-      do {
-        mx = Math.floor(Math.random()*cols);
-        my = Math.floor(Math.random()*rows);
-      } while(Math.abs(mx-player.x)+Math.abs(my-player.y) < 10
-            || (mx===door.x&&my===door.y));
-      monsters.push({x:mx,y:my});
-    }
-
-    document.getElementById('info').innerText = 'Level: '+level;
-  }
-
-  function draw(){
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-
-    // walls
-    ctx.strokeStyle = '#777'; ctx.lineWidth = 2;
-    grid.forEach(c => {
-      const x = c.x*cellSize, y = c.y*cellSize;
-      if(c.walls[0]) ctx.strokeRect(x,y,cellSize,0);
-      if(c.walls[1]) ctx.strokeRect(x+cellSize,y,0,cellSize);
-      if(c.walls[2]) ctx.strokeRect(x+cellSize,y+cellSize,-cellSize,0);
-      if(c.walls[3]) ctx.strokeRect(x,y+cellSize,0,-cellSize);
-    });
-
-    // door
-    ctx.fillStyle = 'gold';
-    ctx.fillRect(
-      door.x*cellSize + cellSize*0.3,
-      door.y*cellSize + cellSize*0.3,
-      cellSize*0.4,
-      cellSize*0.4
-    );
-
-    // player
-    ctx.fillStyle = 'cyan';
-    ctx.beginPath();
-    ctx.arc(
-      player.x*cellSize + cellSize/2,
-      player.y*cellSize + cellSize/2,
-      cellSize*0.3, 0, Math.PI*2
-    );
-    ctx.fill();
-
-    // monsters
-    ctx.fillStyle = 'red';
-    monsters.forEach(m=>{
-      ctx.beginPath();
-      ctx.arc(
-        m.x*cellSize + cellSize/2,
-        m.y*cellSize + cellSize/2,
-        cellSize*0.3, 0, Math.PI*2
-      );
-      ctx.fill();
-    });
-  }
-
-  function movePlayer(dx,dy){
-    const cell = grid[idx(player.x,player.y)];
-    if(dx===1 && !cell.walls[1]) player.x++;
-    if(dx===-1 && !cell.walls[3]) player.x--;
-    if(dy===1 && !cell.walls[2]) player.y++;
-    if(dy===-1 && !cell.walls[0]) player.y--;
-    // reached door?
-    if(player.x===door.x && player.y===door.y){
-      level++;
-      generateMaze();
-    }
-  }
-
-  function keyDown(e){
-    if(e.key==='ArrowUp')    movePlayer(0,-1);
-    if(e.key==='ArrowRight') movePlayer(1,0);
-    if(e.key==='ArrowDown')  movePlayer(0,1);
-    if(e.key==='ArrowLeft')  movePlayer(-1,0);
-  }
-
-  function updateMonsters(){
-    monsters.forEach(m => {
-      const cell = grid[idx(m.x,m.y)];
-      const options = [];
-      if(!cell.walls[0]) options.push({x:m.x,y:m.y-1});
-      if(!cell.walls[1]) options.push({x:m.x+1,y:m.y});
-      if(!cell.walls[2]) options.push({x:m.x,y:m.y+1});
-      if(!cell.walls[3]) options.push({x:m.x-1,y:m.y});
-      let best = [], minD = Infinity;
-      options.forEach(p => {
-        const d = Math.abs(p.x-player.x)+Math.abs(p.y-player.y);
-        if(d < minD){ minD=d; best=[p]; }
-        else if(d === minD) best.push(p);
+    function buildKeyboard() {
+      lettersEl.innerHTML = "";
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").forEach(letter => {
+        const btn = document.createElement("button");
+        btn.textContent = letter;
+        btn.onclick = () => makeGuess(letter.toLowerCase(), btn);
+        lettersEl.appendChild(btn);
       });
-      if(best.length){
-        const nxt = best[Math.floor(Math.random()*best.length)];
-        m.x = nxt.x; m.y = nxt.y;
-      }
-      if(m.x===player.x && m.y===player.y){
-        alert('Game Over — reached level '+level);
-        level = 1;
-        generateMaze();
-      }
-    });
-  }
-
-  function loop(ts){
-    draw();
-    if(ts - lastMonsterMove > monsterInterval){
-      updateMonsters();
-      lastMonsterMove = ts;
     }
-    requestAnimationFrame(loop);
-  }
 
-  window.addEventListener('keydown', keyDown);
-  generateMaze();
-  requestAnimationFrame(loop);
-})();
-</script>
+    function updateDisplay() {
+      wordEl.textContent = pattern.join("");
+      livesEl.textContent = lives;
+      wrongEl.textContent = wrongCount;
+    }
+
+    function makeGuess(letter, btn) {
+      btn.disabled = true;
+      if (guessed.has(letter)) return;
+      guessed.add(letter);
+
+      // partition into families by pattern of this guess
+      const families = {};
+      for (let w of candidates) {
+        let key = "";
+        for (let i = 0; i < w.length; i++) {
+          key += (w[i] === letter ? letter : "-");
+        }
+        (families[key] || (families[key] = [])).push(w);
+      }
+      // pick the largest family
+      let bestKey = Object.keys(families).reduce((a,b) =>
+                 families[b].length > families[a].length ? b : a
+      );
+      candidates = families[bestKey];
+
+      // reveal if any
+      if (bestKey.includes(letter)) {
+        for (let i = 0; i < bestKey.length; i++) {
+          if (bestKey[i] === letter) pattern[i] = letter;
+        }
+      } else {
+        lives--;
+        wrongCount++;
+      }
+      updateDisplay();
+      checkEnd();
+    }
+
+    function checkEnd() {
+      if (!pattern.includes("-")) {
+        setTimeout(() => alert("🎉 You cracked it! Word was “" + candidates[0] + "”"), 10);
+        disableAll();
+      } else if (lives <= 0) {
+        setTimeout(() => alert("😈 The AI wins! Word was “" + candidates[Math.floor(Math.random()*candidates.length)] + "”"), 10);
+        disableAll();
+      }
+    }
+
+    function disableAll() {
+      Array.from(lettersEl.children).forEach(b => b.disabled = true);
+    }
+
+    resetBtn.onclick = init;
+    init();
+  </script>
 </body>
 </html>
