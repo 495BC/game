@@ -1,263 +1,159 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Connect Four vs. AI</title>
+  <meta charset="UTF-8" />
+  <title>Chess vs Stockfish</title>
+  <link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/css/chessboard.min.css"
+    integrity="sha512-TSQ6qSFUZ1Q7INmwvHZkXl3JdwdVUTDW5+2VaO69DaMDPLB5uzgXX3GRcvbChqT9OyiglKApvSTjv0XZk0j7Ww=="
+    crossorigin="anonymous"
+    referrerpolicy="no-referrer"
+  />
   <style>
     body {
-      background: #111;
-      color: #eee;
       font-family: sans-serif;
-      text-align: center;
-      margin: 0; padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin: 20px;
     }
-    #game {
-      display: inline-block;
-      position: relative;
+    #board {
+      width: 480px;
+      margin-top: 20px;
     }
-    canvas { background: #0055aa; display: block; }
-    #reset {
-      margin: 1rem;
-      padding: .5rem 1rem;
-      font-size: 1rem;
-      background: #aa0000;
-      border: none;
-      color: #fff;
-      cursor: pointer;
+    #controls {
+      margin-bottom: 10px;
     }
-    #status { margin-top: .5rem; }
+    #moves {
+      margin-top: 10px;
+      width: 480px;
+      max-height: 200px;
+      overflow-y: auto;
+      border: 1px solid #ccc;
+      padding: 5px;
+    }
   </style>
 </head>
 <body>
-  <h1>Connect Four: Battle the AI</h1>
-  <div id="game">
-    <canvas id="board" width="700" height="600"></canvas>
-    <div id="status"></div>
+  <h1>Play vs Stockfish</h1>
+
+  <div id="controls">
+    <label for="engineSelect">Engine:</label>
+    <select id="engineSelect">
+      <option value="stockfish_15.js">Stockfish 15</option>
+      <option value="stockfish_16.js">Stockfish 16</option>
+    </select>
+
+    <label for="skillLevel">Skill:</label>
+    <input type="range" id="skillLevel" min="0" max="20" value="10">
+    <span id="skillValue">10</span>
+
+    <button id="newGame">New Game</button>
   </div>
-  <button id="reset">New Game</button>
 
+  <div id="board"></div>
+  <div id="moves"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.13.4/chess.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/js/chessboard.min.js"></script>
   <script>
-  // CONFIG
-  const COLS = 7, ROWS = 6, CELL = 100;
-  const HUMAN = 1, AI = 2;
-  const MAX_DEPTH = 6; // increase to make AI deeper (slower)
-  // STATE
-  let board, currentPlayer, gameOver;
-  const canvas = document.getElementById('board');
-  const ctx = canvas.getContext('2d');
-  const statusEl = document.getElementById('status');
-  // INIT
-  function init(){
-    board = Array.from({length:ROWS}, ()=>Array(COLS).fill(0));
-    currentPlayer = HUMAN;
-    gameOver = false;
-    statusEl.textContent = "Your turn";
-    draw();
-  }
-  // DRAW
-  function draw(){
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    // draw grid + pieces
-    for(let r=0; r<ROWS; r++){
-      for(let c=0; c<COLS; c++){
-        const x=c*CELL, y=(r)*CELL;
-        ctx.fillStyle = '#0055aa';
-        ctx.fillRect(x,y,CELL,CELL);
-        ctx.strokeStyle = '#002244';
-        ctx.strokeRect(x,y,CELL,CELL);
-        const piece = board[r][c];
-        if(piece){
-          ctx.beginPath();
-          ctx.arc(x+CELL/2, y+CELL/2, CELL*0.4, 0, Math.PI*2);
-          ctx.fillStyle = piece===HUMAN ? '#ffcc00' : '#ff4444';
-          ctx.fill();
-        } else {
-          ctx.beginPath();
-          ctx.arc(x+CELL/2, y+CELL/2, CELL*0.4, 0, Math.PI*2);
-          ctx.fillStyle = '#001133';
-          ctx.fill();
-        }
-      }
-    }
-  }
-  // CLICK HANDLER
-  canvas.addEventListener('click', e=>{
-    if(gameOver || currentPlayer!==HUMAN) return;
-    const col = Math.floor(e.offsetX / CELL);
-    if(drop(col, HUMAN)){
-      afterMove();
-    }
-  });
-  // DROP PIECE
-  function drop(col, player){
-    for(let r=ROWS-1; r>=0; r--){
-      if(board[r][col]===0){
-        board[r][col] = player;
-        return true;
-      }
-    }
-    return false;
-  }
-  // POST-MOVE
-  function afterMove(){
-    draw();
-    const win = checkWin(board, currentPlayer);
-    if(win || isFull(board)){
-      endGame(win? currentPlayer : 0);
-      return;
-    }
-    currentPlayer = currentPlayer===HUMAN ? AI : HUMAN;
-    if(currentPlayer===AI){
-      statusEl.textContent = "AI thinking...";
-      setTimeout(aiTurn, 200);
-    } else {
-      statusEl.textContent = "Your turn";
-    }
-  }
-  // AI TURN
-  function aiTurn(){
-    const {column} = minimax(board, MAX_DEPTH, -Infinity, Infinity, true);
-    drop(column, AI);
-    afterMove();
-  }
-  // ENDGAME
-  function endGame(winner){
-    gameOver = true;
-    if(winner===HUMAN) statusEl.textContent = "🎉 You win!";
-    else if(winner===AI) statusEl.textContent = "💥 AI wins!";
-    else statusEl.textContent = "🤝 Draw!";
-  }
-  // CHECK FULL
-  function isFull(b){
-    return b[0].every(c=>c!==0);
-  }
-  // WIN CHECK
-  function checkWin(b, player){
-    // directions: h,v,diag1,diag2
-    for(let r=0; r<ROWS; r++){
-      for(let c=0; c<COLS; c++){
-        if(b[r][c]!==player) continue;
-        if(c+3<COLS && [1,2,3].every(i=>b[r][c+i]===player)) return true;
-        if(r+3<ROWS && [1,2,3].every(i=>b[r+i][c]===player)) return true;
-        if(c+3<COLS && r+3<ROWS && [1,2,3].every(i=>b[r+i][c+i]===player)) return true;
-        if(c-3>=0   && r+3<ROWS && [1,2,3].every(i=>b[r+i][c-i]===player)) return true;
-      }
-    }
-    return false;
-  }
-  // VALID COLUMNS
-  function validCols(b){
-    const cols = [];
-    for(let c=0;c<COLS;c++){
-      if(b[0][c]===0) cols.push(c);
-    }
-    return cols;
-  }
-  // SCORE WINDOW
-  function scoreWindow(window, player){
-    const opp = player===AI? HUMAN:AI;
-    const count = num=>window.filter(x=>x===num).length;
-    const score = count(player)===4 ? 100
-                : count(player)===3 && count(0)===1 ? 5
-                : count(player)===2 && count(0)===2 ? 2
-                : 0;
-    const negative = count(opp)===3 && count(0)===1 ? -4 : 0;
-    return score + negative;
-  }
-  // HEURISTIC EVAL
-  function evaluateBoard(b){
-    let score=0;
-    // center control
-    const centerArray = b.map(r=>r[Math.floor(COLS/2)]);
-    score += centerArray.filter(x=>x===AI).length * 3;
-    // horizontal
-    for(let r=0; r<ROWS; r++){
-      for(let c=0; c<COLS-3; c++){
-        const window = [b[r][c],b[r][c+1],b[r][c+2],b[r][c+3]];
-        score += scoreWindow(window, AI);
-      }
-    }
-    // vertical
-    for(let c=0; c<COLS; c++){
-      for(let r=0; r<ROWS-3; r++){
-        const window = [b[r][c],b[r+1][c],b[r+2][c],b[r+3][c]];
-        score += scoreWindow(window, AI);
-      }
-    }
-    // diag down-right
-    for(let r=0; r<ROWS-3; r++){
-      for(let c=0; c<COLS-3; c++){
-        const window = [b[r][c],b[r+1][c+1],b[r+2][c+2],b[r+3][c+3]];
-        score += scoreWindow(window, AI);
-      }
-    }
-    // diag down-left
-    for(let r=0; r<ROWS-3; r++){
-      for(let c=3; c<COLS; c++){
-        const window = [b[r][c],b[r+1][c-1],b[r+2][c-2],b[r+3][c-3]];
-        score += scoreWindow(window, AI);
-      }
-    }
-    return score;
-  }
-  // CLONE BOARD
-  function clone(b){
-    return b.map(r=>r.slice());
-  }
-  // MINIMAX + ALPHA-BETA
-  function minimax(b, depth, alpha, beta, maximizing){
-    const valid = validCols(b);
-    const terminal = checkWin(b, HUMAN) || checkWin(b, AI) || valid.length===0;
-    if(depth===0 || terminal){
-      if(terminal){
-        if(checkWin(b, AI)) return {score: Infinity};
-        else if(checkWin(b, HUMAN)) return {score:-Infinity};
-        else return {score:0};
-      }
-      return {score: evaluateBoard(b)};
-    }
-    if(maximizing){
-      let value = -Infinity, bestCol = valid[0];
-      for(const col of valid){
-        const temp = clone(b);
-        dropTo(temp, col, AI);
-        const newScore = minimax(temp, depth-1, alpha, beta, false).score;
-        if(newScore > value){
-          value = newScore; bestCol = col;
-        }
-        alpha = Math.max(alpha, value);
-        if(alpha >= beta) break;
-      }
-      return {score:value, column:bestCol};
-    } else {
-      let value = Infinity, bestCol = valid[0];
-      for(const col of valid){
-        const temp = clone(b);
-        dropTo(temp, col, HUMAN);
-        const newScore = minimax(temp, depth-1, alpha, beta, true).score;
-        if(newScore < value){
-          value = newScore; bestCol = col;
-        }
-        beta = Math.min(beta, value);
-        if(alpha >= beta) break;
-      }
-      return {score:value, column:bestCol};
-    }
-  }
-  // DROP ON CLONED BOARD
-  function dropTo(b, col, player){
-    for(let r=ROWS-1; r>=0; r--){
-      if(b[r][col]===0){
-        b[r][col]=player;
-        break;
-      }
-    }
-  }
-  // RESET BUTTON
-  document.getElementById('reset').addEventListener('click', init);
+    const boardEl = document.getElementById('board');
+    const movesEl = document.getElementById('moves');
+    const engineSelect = document.getElementById('engineSelect');
+    const skillInput = document.getElementById('skillLevel');
+    const skillDisplay = document.getElementById('skillValue');
+    const newGameBtn = document.getElementById('newGame');
 
-  // START
-  init();
+    let game = new Chess();
+    let board;
+    let engine;
+    let engineBusy = false;
+
+    // Reflect slider
+    skillInput.addEventListener('input', () => {
+      skillDisplay.textContent = skillInput.value;
+    });
+
+    // Load/Reload Stockfish when engine or skill changes
+    function loadEngine() {
+      if (engine) engine.terminate();
+      engine = new Worker(engineSelect.value);
+      engine.onmessage = handleEngineMessage;
+      engine.postMessage('uci');
+      engine.postMessage('ucinewgame');
+      engine.postMessage('setoption name Skill Level value ' + skillInput.value);
+    }
+    engineSelect.addEventListener('change', loadEngine);
+    skillInput.addEventListener('change', () => {
+      engine.postMessage('setoption name Skill Level value ' + skillInput.value);
+    });
+
+    // Parse bestmove from engine
+    function handleEngineMessage(event) {
+      const line = event.data.toString();
+      if (line.startsWith('bestmove')) {
+        const mv = line.split(' ')[1];
+        if (mv && mv !== '(none)') {
+          game.move({ from: mv.substr(0,2), to: mv.substr(2,2), promotion: 'q' });
+          board.position(game.fen());
+          updateMoveList();
+        }
+        engineBusy = false;
+      }
+    }
+
+    // When player drops a piece
+    function onDrop(source, target) {
+      if (engineBusy) return 'snapback';
+      const mv = game.move({ from: source, to: target, promotion: 'q' });
+      if (!mv) return 'snapback';
+
+      board.position(game.fen());
+      updateMoveList();
+      window.setTimeout(engineMove, 200);
+    }
+
+    // Tell engine to think and play
+    function engineMove() {
+      if (game.game_over()) return;
+      engineBusy = true;
+      engine.postMessage('position fen ' + game.fen());
+      engine.postMessage('go depth 15');
+    }
+
+    // Render move history
+    function updateMoveList() {
+      const hist = game.history({ verbose: true });
+      let html = '';
+      for (let i = 0; i < hist.length; i += 2) {
+        const num = (i/2) + 1;
+        const w = hist[i]   ? hist[i].san   : '';
+        const b = hist[i+1] ? hist[i+1].san : '';
+        html += `<div>${num}. ${w} ${b}</div>`;
+      }
+      movesEl.innerHTML = html;
+    }
+
+    // Reset everything
+    function startNewGame() {
+      game.reset();
+      board.position('start');
+      updateMoveList();
+      loadEngine();
+    }
+
+    // Initialize board
+    board = Chessboard(boardEl, {
+      draggable: true,
+      position: 'start',
+      onDrop
+    });
+
+    newGameBtn.addEventListener('click', startNewGame);
+
+    // Kick off
+    startNewGame();
   </script>
 </body>
 </html>
