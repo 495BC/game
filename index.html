@@ -13,7 +13,9 @@
   <style>
     body {
       font-family: sans-serif;
-      display: flex; flex-direction: column; align-items: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
       margin: 20px;
     }
     #board { width: 480px; margin-top: 20px; }
@@ -49,116 +51,114 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.13.4/chess.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/js/chessboard.min.js"></script>
   <script>
-    // UI references & globals
-    const engineSelect = document.getElementById('engineSelect');
-    const skillInput   = document.getElementById('skillLevel');
-    const skillDisplay = document.getElementById('skillValue');
-    const newGameBtn   = document.getElementById('newGame');
-    const movesEl      = document.getElementById('moves');
-    const boardEl      = document.getElementById('board');
+    document.addEventListener('DOMContentLoaded', () => {
+      // UI references & game state
+      const engineSelect = document.getElementById('engineSelect');
+      const skillInput   = document.getElementById('skillLevel');
+      const skillDisplay = document.getElementById('skillValue');
+      const newGameBtn   = document.getElementById('newGame');
+      const movesEl      = document.getElementById('moves');
+      const game         = new Chess();
+      let board, engine, engineReady = false, engineBusy = false;
 
-    let game       = new Chess();      // chess.js logic
-    let board;                         // chessboard.js instance
-    let engine;                        // Stockfish Worker
-    let engineBusy = false;           // throttle flag
+      // Reflect slider changes
+      skillInput.addEventListener('input', () => {
+        skillDisplay.textContent = skillInput.value;
+      });
 
-    // Update skill slider label
-    skillInput.addEventListener('input', () => {
-      skillDisplay.textContent = skillInput.value;
-    });
-
-    // Load/Reload Stockfish engine
-    function loadEngine() {
-      if (engine) engine.terminate();
-      engine = new Worker(engineSelect.value);
-      engine.onmessage = handleEngineMessage;
-
-      // UCI init
-      engine.postMessage('uci');
-      engine.postMessage('isready');
-      engine.postMessage('ucinewgame');
-      engine.postMessage('setoption name Skill Level value ' + skillInput.value);
-    }
-
-    // Full reset: game + board + engine
-    function startNewGame() {
-      game.reset();
-      board.position('start');
-      updateMoveList();
-      loadEngine();
-    }
-
-    // Engine version change also resets match
-    engineSelect.addEventListener('change', startNewGame);
-
-    // Update skill level on change
-    skillInput.addEventListener('change', () => {
-      if (engine) {
-        engine.postMessage('setoption name Skill Level value ' + skillInput.value);
+      // Initialize the Chessboard.js board
+      function initBoard() {
+        board = Chessboard('board', {
+          draggable: true,
+          position: 'start',
+          onDrop,
+          onSnapEnd
+        });
       }
-    });
+      initBoard();  // first‐time setup :contentReference[oaicite:4]{index=4}
 
-    // Handle Stockfish messages
-    function handleEngineMessage(evt) {
-      const line = evt.data.toString().trim();
-      if (line === 'readyok') return;
-      if (line.startsWith('bestmove')) {
-        const mv = line.split(' ')[1];
-        if (mv && mv !== '(none)') {
-          game.move({ from: mv.substr(0,2), to: mv.substr(2,2), promotion: 'q' });
-          board.position(game.fen());
-          updateMoveList();
+      // Load (or reload) the Stockfish Worker with UCI init
+      function initEngine() {
+        if (engine) engine.terminate();               // kill old worker :contentReference[oaicite:5]{index=5}
+        engineReady = false;
+        engine = new Worker(engineSelect.value);
+        engine.onmessage = (e) => {
+          const msg = e.data.toString().trim();
+          if (msg === 'readyok') {
+            if (!engineReady) {
+              engineReady = true;
+              engine.postMessage('ucinewgame');
+              engine.postMessage(`setoption name Skill Level value ${skillInput.value}`);  // set skill :contentReference[oaicite:6]{index=6}
+            }
+          } else if (msg.startsWith('bestmove')) {
+            const mv = msg.split(' ')[1];
+            if (mv && mv !== '(none)') {
+              game.move({ from: mv.substr(0,2), to: mv.substr(2,2), promotion: 'q' });
+              board.position(game.fen());
+              updateMoves();
+            }
+            engineBusy = false;
+          }
+        };
+        engine.postMessage('uci');
+        engine.postMessage('isready');
+      }
+
+      // Full reset: game logic + board UI + engine :contentReference[oaicite:7]{index=7}
+      function startNewGame() {
+        game.reset();
+        board.position('start');
+        updateMoves();
+        initEngine();
+      }
+
+      // Wire up controls
+      newGameBtn.addEventListener('click', startNewGame);
+      engineSelect.addEventListener('change', startNewGame);  // version switch = fresh game :contentReference[oaicite:8]{index=8}
+      skillInput.addEventListener('change', () => {
+        if (engineReady) {
+          engine.postMessage(`setoption name Skill Level value ${skillInput.value}`);
         }
-        engineBusy = false;
+      });
+
+      // Player move handler
+      function onDrop(source, target) {
+        if (!engineReady || engineBusy) return 'snapback';
+        const move = game.move({ from: source, to: target, promotion: 'q' });
+        if (!move) return 'snapback';
+        board.position(game.fen());
+        updateMoves();
+        engineMove();
       }
-    }
 
-    // Player move handler
-    function onDrop(source, target) {
-      if (engineBusy) return 'snapback';
-      const move = game.move({ from: source, to: target, promotion: 'q' });
-      if (!move) return 'snapback';
-      board.position(game.fen());
-      updateMoveList();
-      setTimeout(engineMove, 200);
-    }
-
-    // Redraw after special moves
-    function onSnapEnd() {
-      board.position(game.fen());
-    }
-
-    // Ask engine to move
-    function engineMove() {
-      if (game.game_over()) return;
-      engineBusy = true;
-      engine.postMessage('position fen ' + game.fen());
-      engine.postMessage('go depth 15');
-    }
-
-    // Update move history display
-    function updateMoveList() {
-      const hist = game.history({ verbose: true });
-      let html = '';
-      for (let i = 0; i < hist.length; i += 2) {
-        const num = (i/2) + 1;
-        const w   = hist[i]   ? hist[i].san   : '';
-        const b   = hist[i+1] ? hist[i+1].san : '';
-        html += `<div>${num}. ${w} ${b}</div>`;
+      // Redraw on special moves (castling, en passant) :contentReference[oaicite:9]{index=9}
+      function onSnapEnd() {
+        board.position(game.fen());
       }
-      movesEl.innerHTML = html;
-    }
 
-    // Initialize board & start
-    board = Chessboard(boardEl, {
-      draggable: true,
-      position: 'start',
-      onDrop,
-      onSnapEnd
+      // Ask Stockfish for its move
+      function engineMove() {
+        engineBusy = true;
+        engine.postMessage('position fen ' + game.fen());
+        engine.postMessage('go depth 15');
+      }
+
+      // Update the PGN/move list display
+      function updateMoves() {
+        const hist = game.history({ verbose: true });
+        let html = '';
+        for (let i = 0; i < hist.length; i += 2) {
+          const num = (i/2) + 1;
+          const w   = hist[i]   ? hist[i].san   : '';
+          const b   = hist[i+1] ? hist[i+1].san : '';
+          html += `<div>${num}. ${w} ${b}</div>`;
+        }
+        movesEl.innerHTML = html;
+      }
+
+      // Kick off the first game
+      startNewGame();
     });
-
-    newGameBtn.addEventListener('click', startNewGame);
-    startNewGame();
   </script>
 </body>
 </html>
