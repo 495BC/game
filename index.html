@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Lights Out Puzzle</title>
+<style>
+body { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; background:#222; color:#fff; margin:0; font-family:sans-serif; }
+h1 { margin:0; }
+#game { display:grid; grid-template-columns: repeat(5,60px); grid-gap:5px; margin-top:20px; }
+.cell { width:60px; height:60px; background:yellow; cursor:pointer; }
+.off { background:#555; }
+#controls { margin-top:20px; }
+button { padding:10px 20px; font-size:16px; }
+#moves { margin-left:10px; font-size:16px; }
+</style>
+</head>
+<body>
+<h1>Lights Out</h1>
+<div id="game"></div>
+<div id="controls">
+  <button id="reset">Reset</button>
+  <span id="moves">Moves: 0</span>
+</div>
+<script>
+let size=5;
+let game=document.getElementById('game');
+let movesDisplay=document.getElementById('moves');
+let resetBtn=document.getElementById('reset');
+let moves=0;
+let cells=[];
+function init(){
+  moves=0;
+  updateMoves();
+  game.innerHTML='';
+  cells=[];
+  for(let i=0;i<size;i++){
+    cells[i]=[];
+    for(let j=0;j<size;j++){
+      let cell=document.createElement('div');
+      cell.className='cell';
+      cell.dataset.i=i;
+      cell.dataset.j=j;
+      cell.addEventListener('click',onClick);
+      game.appendChild(cell);
+      cells[i][j]=cell;
+    }
+  }
+  scramble();
+}
+function updateMoves(){
+  movesDisplay.textContent='Moves: '+moves;
+}
+function toggle(i,j){
+  if(i<0||j<0||i>=size||j>=size) return;
+  cells[i][j].classList.toggle('off');
+}
+function onClick(){
+  let i=+this.dataset.i;
+  let j=+this.dataset.j;
+  toggle(i,j);
+  toggle(i-1,j);
+  toggle(i+1,j);
+  toggle(i,j-1);
+  toggle(i,j+1);
+  moves++;
+  updateMoves();
+  checkWin();
+}
+function onClickCell(i,j){
+  toggle(i,j);
+  toggle(i-1,j);
+  toggle(i+1,j);
+  toggle(i,j-1);
+  toggle(i,j+1);
+}
+function checkWin(){
+  for(let row of cells){
+    for(let cell of row){
+      if(!cell.classList.contains('off')) return;
+    }
+  }
+  setTimeout(function(){
+    alert('You won in '+moves+' moves!');
+  },100);
+}
+function scramble(){
+  for(let k=0;k<size*size*2;k++){
+    let i=Math.floor(Math.random()*size);
+    let j=Math.floor(Math.random()*size);
+    onClickCell(i,j);
+  }
+}
+resetBtn.addEventListener('click',init);
+init();
+</script>
+</body>
+</html>
