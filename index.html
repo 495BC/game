@@ -1,293 +1,225 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
   <meta charset="UTF-8">
-  <title>Dimensional Maze</title>
+  <title>Nested Maze Runner</title>
   <style>
-    body { margin:0; overflow:hidden; background:#222; color:#fff; font-family:sans-serif; }
-    #ui { position:absolute; top:10px; left:10px; z-index:10; }
-    canvas, #view3d { position:absolute; top:0; left:0; }
-    #view2d, #view1d, #view3d { display:none; }
+    html, body { margin:0; padding:0; background:#222; color:#ddd; overflow:hidden; }
+    #gameCanvas { display:block; margin:auto; background:#333; }
+    #info {
+      position:absolute; top:10px; left:10px; color:#fff;
+      font-family:sans-serif; font-size:18px;
+    }
   </style>
 </head>
 <body>
-  <div id="ui">You are a <span id="dimLabel">2D Square</span></div>
-  <canvas id="view2d"></canvas>
-  <canvas id="view1d"></canvas>
-  <div id="view3d"></div>
+  <canvas id="gameCanvas" width="600" height="600"></canvas>
+  <div id="info">Level: 1</div>
+<script>
+(() => {
+  const canvas = document.getElementById('gameCanvas'),
+        ctx    = canvas.getContext('2d');
+  let cols, rows, cellSize,
+      grid = [], stack = [],
+      player = {x:0,y:0},
+      door   = {x:0,y:0},
+      monsters = [],
+      level = 1,
+      monsterInterval = 500,
+      lastMonsterMove = 0;
 
-  <!-- Three.js -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script>
-  // config
-  const COLS=15, ROWS=15, CELL=40;
-  const DOOR_X=COLS-1, DOOR_Y=ROWS-1;
-  const CORRIDOR_LEN=COLS, DOOR1_POS=CORRIDOR_LEN-1;
+  // Cell holds wall flags [top, right, bottom, left]
+  function Cell(x,y){
+    this.x = x; this.y = y;
+    this.walls = [true,true,true,true];
+    this.visited = false;
+  }
+  Cell.prototype.checkNeighbors = function(){
+    const {x,y} = this, list = [];
+    const up    = y>0        && grid[idx(x,y-1)],
+          right = x<cols-1   && grid[idx(x+1,y)],
+          down  = y<rows-1   && grid[idx(x,y+1)],
+          left  = x>0        && grid[idx(x-1,y)];
+    if(up    && !up.visited)    list.push(up);
+    if(right && !right.visited) list.push(right);
+    if(down  && !down.visited)  list.push(down);
+    if(left  && !left.visited)  list.push(left);
+    return list;
+  };
 
-  // state
-  let grid, player2={x:0,y:0}, pos1D=0, dimension=2, angle=0;
-  let scene, camera, renderer, playerMesh;
-  let monsterMesh, monsterCell, monsterInterval;
+  function idx(x,y){ return x + y * cols; }
 
-  // DOM
-  const dimLabel = document.getElementById('dimLabel');
-  const view2d = document.getElementById('view2d'), ctx2 = view2d.getContext('2d');
-  const view1d = document.getElementById('view1d'), ctx1 = view1d.getContext('2d');
-  const view3d = document.getElementById('view3d');
+  function removeWalls(a,b){
+    const dx = a.x - b.x, dy = a.y - b.y;
+    if(dx===1){ a.walls[3]=false; b.walls[1]=false; }
+    if(dx===-1){ a.walls[1]=false; b.walls[3]=false; }
+    if(dy===1){ a.walls[0]=false; b.walls[2]=false; }
+    if(dy===-1){ a.walls[2]=false; b.walls[0]=false; }
+  }
 
-  // maze with DFS
-  function genMaze(){
-    let g=[];
-    for(let x=0;x<COLS;x++){
-      g[x]=[];
-      for(let y=0;y<ROWS;y++){
-        g[x][y]={x,y,walls:{top:true,right:true,bottom:true,left:true},visited:false};
+  function generateMaze(){
+    grid = [];
+    cols = 15 + level*2;
+    rows = 15 + level*2;
+    cellSize = canvas.width / cols;
+
+    // initialize cells
+    for(let y=0; y<rows; y++){
+      for(let x=0; x<cols; x++){
+        grid.push(new Cell(x,y));
       }
     }
-    let stack=[g[0][0]]; g[0][0].visited=true;
+
+    // carve with DFS backtracker
+    const start = grid[0];
+    start.visited = true;
+    stack = [start];
     while(stack.length){
-      let cur=stack[stack.length-1], {x,y}=cur, nbrs=[];
-      if(y>0 && !g[x][y-1].visited) nbrs.push(g[x][y-1]);
-      if(x<COLS-1 && !g[x+1][y].visited) nbrs.push(g[x+1][y]);
-      if(y<ROWS-1 && !g[x][y+1].visited) nbrs.push(g[x][y+1]);
-      if(x>0 && !g[x-1][y].visited) nbrs.push(g[x-1][y]);
+      const current = stack.pop();
+      const nbrs = current.checkNeighbors();
       if(nbrs.length){
-        let nxt=nbrs[Math.floor(Math.random()*nbrs.length)];
-        if(nxt.x===x){
-          if(nxt.y<y){ cur.walls.top=false; nxt.walls.bottom=false; }
-          else       { cur.walls.bottom=false; nxt.walls.top=false; }
-        } else {
-          if(nxt.x<x){ cur.walls.left=false; nxt.walls.right=false; }
-          else        { cur.walls.right=false; nxt.walls.left=false; }
-        }
-        nxt.visited=true;
-        stack.push(nxt);
-      } else stack.pop();
+        stack.push(current);
+        const next = nbrs[Math.floor(Math.random()*nbrs.length)];
+        next.visited = true;
+        removeWalls(current,next);
+        stack.push(next);
+      }
     }
-    return g;
-  }
 
-  // draw 2D
-  view2d.width=COLS*CELL; view2d.height=ROWS*CELL;
-  function draw2D(){
-    ctx2.fillStyle='#222'; ctx2.fillRect(0,0,view2d.width,view2d.height);
-    ctx2.strokeStyle='#fff'; ctx2.lineWidth=2;
-    for(let x=0;x<COLS;x++) for(let y=0;y<ROWS;y++){
-      let c=grid[x][y], X=x*CELL, Y=y*CELL;
-      if(c.walls.top)    { ctx2.beginPath(); ctx2.moveTo(X,Y); ctx2.lineTo(X+CELL,Y); ctx2.stroke(); }
-      if(c.walls.right)  { ctx2.beginPath(); ctx2.moveTo(X+CELL,Y); ctx2.lineTo(X+CELL,Y+CELL); ctx2.stroke(); }
-      if(c.walls.bottom) { ctx2.beginPath(); ctx2.moveTo(X+CELL,Y+CELL); ctx2.lineTo(X,Y+CELL); ctx2.stroke(); }
-      if(c.walls.left)   { ctx2.beginPath(); ctx2.moveTo(X,Y+CELL); ctx2.lineTo(X,Y); ctx2.stroke(); }
+    // pick a random border cell (not the start) as exit door
+    const border = grid.filter(c =>
+      (c.x===0||c.x===cols-1||c.y===0||c.y===rows-1) &&
+      !(c.x===0&&c.y===0)
+    );
+    const exitCell = border[Math.floor(Math.random()*border.length)];
+    // remove its outer wall for a proper “door”
+    if(exitCell.x===0)         exitCell.walls[3]=false;
+    if(exitCell.x===cols-1)    exitCell.walls[1]=false;
+    if(exitCell.y===0)         exitCell.walls[0]=false;
+    if(exitCell.y===rows-1)    exitCell.walls[2]=false;
+
+    door.x = exitCell.x; door.y = exitCell.y;
+    player.x = 0; player.y = 0;
+
+    // spawn one monster per level, not too close
+    monsters = [];
+    for(let i=0; i<level; i++){
+      let mx, my;
+      do {
+        mx = Math.floor(Math.random()*cols);
+        my = Math.floor(Math.random()*rows);
+      } while(Math.abs(mx-player.x)+Math.abs(my-player.y) < 10
+            || (mx===door.x&&my===door.y));
+      monsters.push({x:mx,y:my});
     }
-    // portal & player
-    ctx2.fillStyle='lime';
-    ctx2.fillRect(DOOR_X*CELL+8, DOOR_Y*CELL+8, CELL-16, CELL-16);
-    ctx2.fillStyle='cyan';
-    ctx2.fillRect(player2.x*CELL+CELL/4, player2.y*CELL+CELL/4, CELL/2, CELL/2);
+
+    document.getElementById('info').innerText = 'Level: '+level;
   }
 
-  // draw 1D
-  view1d.width=CORRIDOR_LEN*CELL; view1d.height=100;
-  function draw1D(){
-    ctx1.fillStyle='#222'; ctx1.fillRect(0,0,view1d.width,view1d.height);
-    ctx1.strokeStyle='#fff'; ctx1.lineWidth=2;
-    ctx1.beginPath(); ctx1.moveTo(0,50); ctx1.lineTo(view1d.width,50); ctx1.stroke();
-    for(let i=0;i<=CORRIDOR_LEN;i++){
-      let x=i*CELL;
-      ctx1.beginPath(); ctx1.moveTo(x,40); ctx1.lineTo(x,60); ctx1.stroke();
-    }
-    let doorX = DOOR1_POS*CELL + (CELL-40)/2;
-    ctx1.fillStyle='orange'; ctx1.fillRect(doorX,10,40,40);
-    ctx1.strokeStyle='cyan'; ctx1.lineWidth=4;
-    let px = pos1D*CELL + CELL/2;
-    ctx1.beginPath(); ctx1.moveTo(px,35); ctx1.lineTo(px,65); ctx1.stroke();
-  }
+  function draw(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  // clear old monster
-  function clearMonster(){
-    if(monsterInterval){ clearInterval(monsterInterval); monsterInterval=null; }
-    if(monsterMesh && scene){
-      scene.remove(monsterMesh);
-      monsterMesh.geometry.dispose();
-      monsterMesh.material.dispose();
-      monsterMesh=null;
-    }
-  }
-
-  // spawn simple AI monster
-  function spawnMonster(){
-    let rx, ry;
-    do {
-      rx = Math.floor(Math.random()*COLS);
-      ry = Math.floor(Math.random()*ROWS);
-    } while(rx===player2.x && ry===player2.y);
-    monsterCell={x:rx,y:ry};
-    let mg=new THREE.BoxGeometry(5,5,5);
-    let mm=new THREE.MeshStandardMaterial({color:0xff0000});
-    monsterMesh=new THREE.Mesh(mg,mm);
-    monsterMesh.position.set(rx*10+5,2.5,ry*10+5);
-    scene.add(monsterMesh);
-
-    monsterInterval = setInterval(()=>{
-      let c = grid[monsterCell.x][monsterCell.y], dirs=[];
-      if(!c.walls.top)    dirs.push({dx:0,dy:-1});
-      if(!c.walls.right)  dirs.push({dx:1,dy:0});
-      if(!c.walls.bottom) dirs.push({dx:0,dy:1});
-      if(!c.walls.left)   dirs.push({dx:-1,dy:0});
-      let move;
-      if(Math.random()<0.5){
-        // greedy
-        let best, bd=Infinity;
-        dirs.forEach(d=>{
-          let dist = Math.abs((monsterCell.x+d.dx)-player2.x) + Math.abs((monsterCell.y+d.dy)-player2.y);
-          if(dist<bd){ bd=dist; best=d; }
-        });
-        move=best;
-      } else {
-        move=dirs[Math.floor(Math.random()*dirs.length)];
-      }
-      if(move){
-        monsterCell.x+=move.dx;
-        monsterCell.y+=move.dy;
-        monsterMesh.position.set(monsterCell.x*10+5,2.5,monsterCell.y*10+5);
-      }
-      if(monsterCell.x===player2.x && monsterCell.y===player2.y){
-        alert('Monster caught you!'); warp();
-      }
-    }, 800);
-  }
-
-  // init 3D view
-  function init3D(){
-    scene=new THREE.Scene(); scene.background=new THREE.Color(0x222222);
-    camera=new THREE.PerspectiveCamera(75,innerWidth/innerHeight,1,1000);
-    renderer=new THREE.WebGLRenderer(); renderer.setSize(innerWidth,innerHeight);
-    view3d.appendChild(renderer.domElement);
-
-    scene.add(new THREE.AmbientLight(0xcccccc,0.5));
-    let dl=new THREE.DirectionalLight(0xffffff,0.8);
-    dl.position.set(1,2,1).normalize();
-    scene.add(dl);
-
-    let fl=new THREE.PlaneGeometry(COLS*10,ROWS*10);
-    let fm=new THREE.MeshStandardMaterial({color:0x333333});
-    let floor=new THREE.Mesh(fl,fm);
-    floor.rotation.x=-Math.PI/2; scene.add(floor);
-
-    grid.flat().forEach(cell=>{
-      let x0=cell.x*10, z0=cell.y*10, h=10;
-      if(cell.walls.top){
-        let w=new THREE.BoxGeometry(10,h,1);
-        let m=new THREE.Mesh(w,new THREE.MeshStandardMaterial({color:0xffffff}));
-        m.position.set(x0+5,h/2,z0); scene.add(m);
-      }
-      if(cell.walls.right){
-        let w=new THREE.BoxGeometry(1,h,10);
-        let m=new THREE.Mesh(w,new THREE.MeshStandardMaterial({color:0xffffff}));
-        m.position.set(x0+10,h/2,z0+5); scene.add(m);
-      }
-      if(cell.walls.bottom){
-        let w=new THREE.BoxGeometry(10,h,1);
-        let m=new THREE.Mesh(w,new THREE.MeshStandardMaterial({color:0xffffff}));
-        m.position.set(x0+5,h/2,z0+10); scene.add(m);
-      }
-      if(cell.walls.left){
-        let w=new THREE.BoxGeometry(1,h,10);
-        let m=new THREE.Mesh(w,new THREE.MeshStandardMaterial({color:0xffffff}));
-        m.position.set(x0,h/2,z0+5); scene.add(m);
-      }
+    // walls
+    ctx.strokeStyle = '#777'; ctx.lineWidth = 2;
+    grid.forEach(c => {
+      const x = c.x*cellSize, y = c.y*cellSize;
+      if(c.walls[0]) ctx.strokeRect(x,y,cellSize,0);
+      if(c.walls[1]) ctx.strokeRect(x+cellSize,y,0,cellSize);
+      if(c.walls[2]) ctx.strokeRect(x+cellSize,y+cellSize,-cellSize,0);
+      if(c.walls[3]) ctx.strokeRect(x,y+cellSize,0,-cellSize);
     });
 
-    let pg=new THREE.BoxGeometry(5,5,5);
-    let pm=new THREE.MeshStandardMaterial({color:0x00ffff});
-    playerMesh=new THREE.Mesh(pg,pm);
-    playerMesh.position.set(player2.x*10+5,2.5,player2.y*10+5);
-    scene.add(playerMesh);
+    // door
+    ctx.fillStyle = 'gold';
+    ctx.fillRect(
+      door.x*cellSize + cellSize*0.3,
+      door.y*cellSize + cellSize*0.3,
+      cellSize*0.4,
+      cellSize*0.4
+    );
 
-    angle=0;
-    camera.position.set(playerMesh.position.x + Math.sin(angle)*12,8,playerMesh.position.z + Math.cos(angle)*12);
-    camera.lookAt(playerMesh.position);
+    // player
+    ctx.fillStyle = 'cyan';
+    ctx.beginPath();
+    ctx.arc(
+      player.x*cellSize + cellSize/2,
+      player.y*cellSize + cellSize/2,
+      cellSize*0.3, 0, Math.PI*2
+    );
+    ctx.fill();
 
-    spawnMonster();
-
-    function animate(){
-      requestAnimationFrame(animate);
-      renderer.render(scene,camera);
-    }
-    animate();
-
-    window.addEventListener('resize',()=>{
-      camera.aspect=innerWidth/innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(innerWidth,innerHeight);
-    });
-  }
-
-  // show correct view
-  function setDimension(d){
-    dimension=d;
-    view2d.style.display = d===2?'block':'none';
-    view1d.style.display = d===1?'block':'none';
-    view3d.style.display = d===3?'block':'none';
-    if(d===2){ dimLabel.textContent='2D Square'; draw2D(); }
-    if(d===1){ dimLabel.textContent='1D Line';   draw1D(); }
-    if(d===3){ dimLabel.textContent='3D Cube';   init3D(); }
-  }
-
-  // warp to a random other dimension
-  function warp(){
-    clearMonster();
-    view3d.innerHTML='';
-    let dims=[1,2,3];
-    dims.splice(dims.indexOf(dimension),1);
-    let next=dims[Math.floor(Math.random()*dims.length)];
-    if(next===2){ grid=genMaze(); player2={x:0,y:0}; }
-    if(next===1){ pos1D=0; }
-    if(next===3){ grid=genMaze(); player2={x:0,y:0}; }
-    setDimension(next);
-  }
-
-  // unified input
-  document.addEventListener('keydown',e=>{
-    if(dimension===2){
-      let c=grid[player2.x][player2.y];
-      if(e.key==='ArrowUp'   && !c.walls.top)    player2.y--;
-      if(e.key==='ArrowRight'&& !c.walls.right)  player2.x++;
-      if(e.key==='ArrowDown' && !c.walls.bottom) player2.y++;
-      if(e.key==='ArrowLeft' && !c.walls.left)   player2.x--;
-      draw2D();
-      if(player2.x===DOOR_X && player2.y===DOOR_Y) warp();
-    }
-    else if(dimension===1){
-      if(e.key==='ArrowLeft' && pos1D>0)       pos1D--;
-      if(e.key==='ArrowRight'&& pos1D<DOOR1_POS) pos1D++;
-      draw1D();
-      if(pos1D===DOOR1_POS) warp();
-    }
-    else if(dimension===3){
-      let c=grid[player2.x][player2.y], moved=false;
-      if(e.key==='ArrowUp'   && !c.walls.top)    { player2.y--; moved=true; }
-      if(e.key==='ArrowDown' && !c.walls.bottom) { player2.y++; moved=true; }
-      if(e.key==='ArrowLeft' && !c.walls.left)   { player2.x--; moved=true; }
-      if(e.key==='ArrowRight'&& !c.walls.right)  { player2.x++; moved=true; }
-      if(e.key==='q') angle-=Math.PI/16;
-      if(e.key==='e') angle+=Math.PI/16;
-      if(moved){
-        playerMesh.position.set(player2.x*10+5,2.5,player2.y*10+5);
-        if(player2.x===DOOR_X && player2.y===DOOR_Y) { warp(); return; }
-      }
-      camera.position.set(
-        playerMesh.position.x + Math.sin(angle)*12,
-        8,
-        playerMesh.position.z + Math.cos(angle)*12
+    // monsters
+    ctx.fillStyle = 'red';
+    monsters.forEach(m=>{
+      ctx.beginPath();
+      ctx.arc(
+        m.x*cellSize + cellSize/2,
+        m.y*cellSize + cellSize/2,
+        cellSize*0.3, 0, Math.PI*2
       );
-      camera.lookAt(playerMesh.position);
-    }
-  });
+      ctx.fill();
+    });
+  }
 
-  // start
-  grid = genMaze();
-  setDimension(2);
-  </script>
+  function movePlayer(dx,dy){
+    const cell = grid[idx(player.x,player.y)];
+    if(dx===1 && !cell.walls[1]) player.x++;
+    if(dx===-1 && !cell.walls[3]) player.x--;
+    if(dy===1 && !cell.walls[2]) player.y++;
+    if(dy===-1 && !cell.walls[0]) player.y--;
+    // reached door?
+    if(player.x===door.x && player.y===door.y){
+      level++;
+      generateMaze();
+    }
+  }
+
+  function keyDown(e){
+    if(e.key==='ArrowUp')    movePlayer(0,-1);
+    if(e.key==='ArrowRight') movePlayer(1,0);
+    if(e.key==='ArrowDown')  movePlayer(0,1);
+    if(e.key==='ArrowLeft')  movePlayer(-1,0);
+  }
+
+  function updateMonsters(){
+    monsters.forEach(m => {
+      const cell = grid[idx(m.x,m.y)];
+      const options = [];
+      if(!cell.walls[0]) options.push({x:m.x,y:m.y-1});
+      if(!cell.walls[1]) options.push({x:m.x+1,y:m.y});
+      if(!cell.walls[2]) options.push({x:m.x,y:m.y+1});
+      if(!cell.walls[3]) options.push({x:m.x-1,y:m.y});
+      let best = [], minD = Infinity;
+      options.forEach(p => {
+        const d = Math.abs(p.x-player.x)+Math.abs(p.y-player.y);
+        if(d < minD){ minD=d; best=[p]; }
+        else if(d === minD) best.push(p);
+      });
+      if(best.length){
+        const nxt = best[Math.floor(Math.random()*best.length)];
+        m.x = nxt.x; m.y = nxt.y;
+      }
+      if(m.x===player.x && m.y===player.y){
+        alert('Game Over — reached level '+level);
+        level = 1;
+        generateMaze();
+      }
+    });
+  }
+
+  function loop(ts){
+    draw();
+    if(ts - lastMonsterMove > monsterInterval){
+      updateMonsters();
+      lastMonsterMove = ts;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  window.addEventListener('keydown', keyDown);
+  generateMaze();
+  requestAnimationFrame(loop);
+})();
+</script>
 </body>
 </html>
