@@ -13,35 +13,36 @@
       position:relative;
       color:#fff;
     }
-    /* Starfield layer */
+    /* Subtle starfield */
     body::before {
       content:'';
       position:absolute; top:0; left:0;
-      width:200%; height:200%;
-      background: radial-gradient(circle, #fff 1px, transparent 1px) repeat 0 0;
-      background-size:4px 4px;
+      width:100%; height:100%;
+      background:
+        radial-gradient(circle, rgba(255,255,255,0.8) .5px, transparent .5px) repeat;
+      background-size:40px 40px;
       z-index:-2;
-      animation: driftStars 100s linear infinite;
+      animation: driftStars 150s linear infinite;
     }
-    /* Nebula layer */
+    /* Soft nebula */
     body::after {
       content:'';
       position:absolute; top:0; left:0;
       width:100%; height:100%;
       background:
-        radial-gradient(circle at 20% 30%, rgba(255,50,150,0.3) 0%, transparent 60%),
-        radial-gradient(circle at 80% 70%, rgba(30,150,255,0.3) 0%, transparent 60%);
-      filter: blur(50px);
+        radial-gradient(circle at 25% 35%, rgba(255,100,180,0.15) 0%, transparent 70%),
+        radial-gradient(circle at 75% 65%, rgba(80,180,255,0.15) 0%, transparent 70%);
+      filter: blur(30px) opacity(0.6);
       z-index:-1;
-      animation: driftNebula 60s linear infinite reverse;
+      animation: driftNebula 80s linear infinite reverse;
     }
     @keyframes driftStars {
       from{transform:translate(0,0);} 
-      to{transform:translate(-50%,-50%);}
+      to{transform:translate(-20%,-20%);}
     }
     @keyframes driftNebula {
       from{transform:translate(0,0);} 
-      to{transform:translate(20%,20%);}
+      to{transform:translate(10%,10%);}
     }
     h1 {
       position:relative; z-index:1;
